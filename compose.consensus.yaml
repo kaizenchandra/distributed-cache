@@ -107,4 +107,4 @@ volumes:
   etcd-0: { }
   etcd-1: { }
   etcd-2: { }
-  keycloak-data: {}
+  keycloak-data: { }

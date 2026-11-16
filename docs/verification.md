@@ -217,48 +217,119 @@ required by the observed test failures; the fixes are in test assumptions and me
 
 ## 2026-11-16 Kubernetes acceptance and JMH follow-up
 
-The configured OrbStack Kubernetes API was offline (localhost:26443 refused connections). Installed official kind v0.33.0 locally with a pinned SHA-256-verified macOS ARM64 binary, then created a disposable single-node cluster `cache-verify` running Kubernetes v1.37.0. Used kubectl v1.37.2 and a separate `.tools/kubeconfig-cache-verify`, leaving the normal context unchanged. The default `standard` local-path StorageClass dynamically bound three 1 GiB ReadWriteOnce etcd PVCs.
+The configured OrbStack Kubernetes API was offline (localhost:26443 refused connections). Installed official kind
+v0.33.0 locally with a pinned SHA-256-verified macOS ARM64 binary, then created a disposable single-node cluster
+`cache-verify` running Kubernetes v1.37.0. Used kubectl v1.37.2 and a separate `.tools/kubeconfig-cache-verify`, leaving
+the normal context unchanged. The default `standard` local-path StorageClass dynamically bound three 1 GiB ReadWriteOnce
+etcd PVCs.
 
-Added `scripts/install-kind.py` with pinned official macOS/Linux ARM64/AMD64 release digests. Executed its offline-binary installation successfully and verified rejection of a corrupt binary. Added `scripts/kubernetes-test.py`, which requires explicit test kubeconfig, creates only a reserved disposable namespace, generates/reuses credentials without printing them, validates manifests server-side, port-forwards a Service, exercises real APIs and lifecycle changes, collects non-secret resource/events/bounded log evidence, and deletes its namespace/PVCs by default.
+Added `scripts/install-kind.py` with pinned official macOS/Linux ARM64/AMD64 release digests. Executed its
+offline-binary installation successfully and verified rejection of a corrupt binary. Added `scripts/kubernetes-test.py`,
+which requires explicit test kubeconfig, creates only a reserved disposable namespace, generates/reuses credentials
+without printing them, validates manifests server-side, port-forwards a Service, exercises real APIs and lifecycle
+changes, collects non-secret resource/events/bounded log evidence, and deletes its namespace/PVCs by default.
 
-Fixed the original legacy manifest's missing coordinator Service and missing coordinator startup/readiness/liveness probes; specified local image pull behavior and added a storage startup probe. Added a consensus manifest with three parallel-start etcd members and PVCs, headless discovery, four storage pods with ordinal DNS identity, two gateways with rolling strategy, resource limits, probes, preferred anti-affinity and PDBs. `.tools/` is excluded from Docker build context because it holds cluster credentials.
+Fixed the original legacy manifest's missing coordinator Service and missing coordinator startup/readiness/liveness
+probes; specified local image pull behavior and added a storage startup probe. Added a consensus manifest with three
+parallel-start etcd members and PVCs, headless discovery, four storage pods with ordinal DNS identity, two gateways with
+rolling strategy, resource limits, probes, preferred anti-affinity and PDBs. `.tools/` is excluded from Docker build
+context because it holds cluster credentials.
 
 Executed deployment verification:
 
-- `docker build -t distributed-cache:0.1.0 .`: PASS, normal Java 21 image build executed all 13 JUnit tests with zero failures/errors/skips. Image config digest in the imported kind runtime was `sha256:52fa00e3cd310510a6cd5db9ad7c83bb15e7284488383a63932f1c4f9213e959`, matching the new build's config. Platform-specific Docker save plus `kind load image-archive` successfully imported the application. Pods pulled etcd's correct architecture themselves.
-- `python3 scripts/kubernetes-test.py --kubeconfig .tools/kubeconfig-cache-verify --mode legacy`: PASS, exit 0. Server schema validation, pod readiness, Service routing, authenticated SET/GET, missing-auth rejection, batch CAS conflict/read, TTL, DELETE and authenticated JVM metrics. Namespace removed afterward.
-- `python3 scripts/kubernetes-test.py --kubeconfig .tools/kubeconfig-cache-verify --mode consensus --reuse`: PASS, exit 0 against the initially manually provisioned test namespace. All nine initial pods Ready, three etcd PVCs Bound; API checks plus actual primary pod replacement/new incarnation/repair, storage 4→5→4 scaling, rolling gateway restart and etcd-0 replacement retaining its persistent Raft member ID and committed cache metadata.
-- `python3 scripts/kubernetes-test.py --kubeconfig .tools/kubeconfig-cache-verify --mode consensus`: PASS again, exit 0 from a fresh namespace with newly generated credentials, validating the exact documented automatic setup. Same lifecycle/repair checks passed; namespace and PVCs removed afterward.
+- `docker build -t distributed-cache:0.1.0 .`: PASS, normal Java 21 image build executed all 13 JUnit tests with zero
+  failures/errors/skips. Image config digest in the imported kind runtime was
+  `sha256:52fa00e3cd310510a6cd5db9ad7c83bb15e7284488383a63932f1c4f9213e959`, matching the new build's config.
+  Platform-specific Docker save plus `kind load image-archive` successfully imported the application. Pods pulled etcd's
+  correct architecture themselves.
+- `python3 scripts/kubernetes-test.py --kubeconfig .tools/kubeconfig-cache-verify --mode legacy`: PASS, exit 0. Server
+  schema validation, pod readiness, Service routing, authenticated SET/GET, missing-auth rejection, batch CAS
+  conflict/read, TTL, DELETE and authenticated JVM metrics. Namespace removed afterward.
+- `python3 scripts/kubernetes-test.py --kubeconfig .tools/kubeconfig-cache-verify --mode consensus --reuse`: PASS, exit
+  0 against the initially manually provisioned test namespace. All nine initial pods Ready, three etcd PVCs Bound; API
+  checks plus actual primary pod replacement/new incarnation/repair, storage 4→5→4 scaling, rolling gateway restart and
+  etcd-0 replacement retaining its persistent Raft member ID and committed cache metadata.
+- `python3 scripts/kubernetes-test.py --kubeconfig .tools/kubeconfig-cache-verify --mode consensus`: PASS again, exit 0
+  from a fresh namespace with newly generated credentials, validating the exact documented automatic setup. Same
+  lifecycle/repair checks passed; namespace and PVCs removed afterward.
 - Python compilation checks for Kubernetes harness and kind installer: PASS.
 
-Image-import issue: importing the cached multi-platform etcd image directly through kind failed because its archive referenced platform digests unavailable locally. The verified flow exports only the installed architecture of the application image (`docker image save --platform linux/arm64`), loads that archive and lets kubelet pull etcd. No TLS validation or image content checks were disabled. A local harness syntax error in its port-forward variable declaration was corrected before either acceptance run.
+Image-import issue: importing the cached multi-platform etcd image directly through kind failed because its archive
+referenced platform digests unavailable locally. The verified flow exports only the installed architecture of the
+application image (`docker image save --platform linux/arm64`), loads that archive and lets kubelet pull etcd. No TLS
+validation or image content checks were disabled. A local harness syntax error in its port-forward variable declaration
+was corrected before either acceptance run.
 
-Added optional Maven `jmh` profile using OpenJDK JMH 1.37. It adds benchmark sources/annotation processing only when selected, writes all build products under `target/jmh`, skips Boot repackaging only for that profile, and produces a runnable classifier jar. Fixed a Spring Boot parent shade-transformer merge conflict by overriding the inherited transformer list. The normal app jar remains separate and runnable. Six benchmarks cover hits, copying, misses, overwrites, eviction and a 256-entry expiration sweep.
+Added optional Maven `jmh` profile using OpenJDK JMH 1.37. It adds benchmark sources/annotation processing only when
+selected, writes all build products under `target/jmh`, skips Boot repackaging only for that profile, and produces a
+runnable classifier jar. Fixed a Spring Boot parent shade-transformer merge conflict by overriding the inherited
+transformer list. The normal app jar remains separate and runnable. Six benchmarks cover hits, copying, misses,
+overwrites, eviction and a 256-entry expiration sweep.
 
 Executed benchmark verification on Java 21.0.13.0.3 / macOS ARM64:
 
-- `JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -o -Dmaven.repo.local=/tmp/cache-m2 -B -Pjmh verify`: PASS, 13 JUnit tests, zero failures/errors/skips. Missing dependencies were initially downloaded using the same command without offline mode.
+- `JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn -o -Dmaven.repo.local=/tmp/cache-m2 -B -Pjmh verify`: PASS, 13 JUnit
+  tests, zero failures/errors/skips. Missing dependencies were initially downloaded using the same command without
+  offline mode.
 - `java -jar target/jmh/distributed-cache-0.1.0-benchmarks.jar -l`: PASS, six generated benchmarks discovered.
-- All-method smoke command documented in help.md, with LRU/LFU, 128-byte values, one fork, one 200 ms warmup, two 300 ms measurement iterations and GC profiling: PASS, 11 parameterized cases; repeated with fail-on-error enabled.
-- Hit-and-copy commands in help.md, LRU/LFU, 128-byte values, two forks, three 1-second warmups and five 1-second measurements per fork, GC profiling, first with one thread and then four threads: PASS. Four result records, each retaining ten measured iteration samples and JMH confidence intervals.
-- Final default-profile Maven `verify`: PASS, 13 JUnit tests with no failures/errors/skips; normal executable Boot jar repackaged successfully. This confirms the JMH profile does not replace the normal application artifact.
+- All-method smoke command documented in help.md, with LRU/LFU, 128-byte values, one fork, one 200 ms warmup, two 300 ms
+  measurement iterations and GC profiling: PASS, 11 parameterized cases; repeated with fail-on-error enabled.
+- Hit-and-copy commands in help.md, LRU/LFU, 128-byte values, two forks, three 1-second warmups and five 1-second
+  measurements per fork, GC profiling, first with one thread and then four threads: PASS. Four result records, each
+  retaining ten measured iteration samples and JMH confidence intervals.
+- Final default-profile Maven `verify`: PASS, 13 JUnit tests with no failures/errors/skips; normal executable Boot jar
+  repackaged successfully. This confirms the JMH profile does not replace the normal application artifact.
 
-JMH initially could not bind its fork-control socket inside the sandbox; the actual successful runs used approved loopback access and real forked JVMs. No in-process/no-fork fallback was used. Raw smoke and longer results are committed in `docs/benchmark-results/2026-11-16/`, with setup/interpretation in its README. These local microbenchmarks exclude network/serialization/replication/consensus work; no distributed throughput, latency percentile or availability claim follows from them. Expiration fixture setup affects profiler allocation numbers; shared overwrite includes version-generator overhead and can reject out-of-order versions under contention.
+JMH initially could not bind its fork-control socket inside the sandbox; the actual successful runs used approved
+loopback access and real forked JVMs. No in-process/no-fork fallback was used. Raw smoke and longer results are
+committed in `docs/benchmark-results/2026-11-16/`, with setup/interpretation in its README. These local microbenchmarks
+exclude network/serialization/replication/consensus work; no distributed throughput, latency percentile or availability
+claim follows from them. Expiration fixture setup affects profiler allocation numbers; shared overwrite includes
+version-generator overhead and can reject out-of-order versions under contention.
 
-Deployment evidence remains under `target/kubernetes-legacy/` and `target/kubernetes-consensus/`. Added Kubernetes and JMH CI jobs were not run remotely. Single-node kind cannot validate host/zone anti-affinity or node failure. Pod deletion bypasses PDBs; there was no node-drain campaign. Application readiness probes currently establish process health, not fenced data availability. Production etcd/cache transport security, snapshot/restore, certificate rotation, network policies, full storage rolling upgrades, multi-node failures, and distributed received-rate/SLO campaigns remain required. See docs/kubernetes.md. The local kind cluster is disposable and removed after verification; persistent production deployment is not claimed.
+Deployment evidence remains under `target/kubernetes-legacy/` and `target/kubernetes-consensus/`. Added Kubernetes and
+JMH CI jobs were not run remotely. Single-node kind cannot validate host/zone anti-affinity or node failure. Pod
+deletion bypasses PDBs; there was no node-drain campaign. Application readiness probes currently establish process
+health, not fenced data availability. Production etcd/cache transport security, snapshot/restore, certificate rotation,
+network policies, full storage rolling upgrades, multi-node failures, and distributed received-rate/SLO campaigns remain
+required. See docs/kubernetes.md. The local kind cluster is disposable and removed after verification; persistent
+production deployment is not claimed.
 
-Final cleanup confirmed: `kind delete cluster --name cache-verify` removed the single test node. `kubectl config current-context` remained `orbstack`, and `docker ps` showed only the original four development cache containers. No user Kubernetes cluster configuration or development containers were replaced.
+Final cleanup confirmed: `kind delete cluster --name cache-verify` removed the single test node.
+`kubectl config current-context` remained `orbstack`, and `docker ps` showed only the original four development cache
+containers. No user Kubernetes cluster configuration or development containers were replaced.
 
 ## Consensus with Keycloak and Next.js — 2026-11-16
 
-The local development stack was switched from legacy to consensus mode without deleting volumes. Legacy coordinator/storage containers were stopped. Keycloak and its existing realm were preserved. The frontend now targets gateway-0; all three etcd members, four consensus storage nodes and both gateways are running. Each etcd endpoint passed `etcdctl endpoint health` by committing a proposal.
+The local development stack was switched from legacy to consensus mode without deleting volumes. Legacy
+coordinator/storage containers were stopped. Keycloak and its existing realm were preserved. The frontend now targets
+gateway-0; all three etcd members, four consensus storage nodes and both gateways are running. Each etcd endpoint passed
+`etcdctl endpoint health` by committing a proposal.
 
-`python3 scripts/auth-test.py --mode consensus` passed **61 end-to-end HTTP checks**. [Complete check output](auth-consensus-results.txt) contains no passwords or tokens. Tests follow the actual NextAuth/Keycloak authorization-code flow and exercise the Next.js proxy with session cookies. They verify correct and incorrect passwords, user/admin roles, anonymous rejection, frontend and backend authorization, static-token bypass rejection, internal-RPC separation, tampered signatures, expired access tokens, cross-origin rejection, session token confidentiality and logout.
+`python3 scripts/auth-test.py --mode consensus` passed **61 end-to-end HTTP
+checks**. [Complete check output](auth-consensus-results.txt) contains no passwords or tokens. Tests follow the actual
+NextAuth/Keycloak authorization-code flow and exercise the Next.js proxy with session cookies. They verify correct and
+incorrect passwords, user/admin roles, anonymous rejection, frontend and backend authorization, static-token bypass
+rejection, internal-RPC separation, tampered signatures, expired access tokens, cross-origin rejection, session token
+confidentiality and logout.
 
-Cache checks cover all seven operations, missing-key sentinels, permanent TTL, natural expiration, EXPIRE changes, immediate deletion at TTL zero, conditional creation at version zero, successful and conflicting CAS, Unicode and multiline text, empty values, the 64 KiB boundary, invalid inputs, sequential batches with individual conflicts, continuation after failure, malformed-batch prevalidation and deletion. Admin checks cover consensus membership reconciliation, repair status, and rejection of the legacy-only topology mutation. Membership reported four storage nodes, three replicas, and minimum copies of two. A value written through the frontend was read back through gateway-1 with identical value/version/TTL metadata.
+Cache checks cover all seven operations, missing-key sentinels, permanent TTL, natural expiration, EXPIRE changes,
+immediate deletion at TTL zero, conditional creation at version zero, successful and conflicting CAS, Unicode and
+multiline text, empty values, the 64 KiB boundary, invalid inputs, sequential batches with individual conflicts,
+continuation after failure, malformed-batch prevalidation and deletion. Admin checks cover consensus membership
+reconciliation, repair status, and rejection of the legacy-only topology mutation. Membership reported four storage
+nodes, three replicas, and minimum copies of two. A value written through the frontend was read back through gateway-1
+with identical value/version/TTL metadata.
 
-Generated test keys were deleted. Login secrets were loaded from local `.env` without printing them; browser session JSON was checked for access/refresh-token leakage. The test helper reads its own encrypted session server-side using the local NextAuth secret solely to test independent backend authorization. It does not expose tokens to the browser.
+Generated test keys were deleted. Login secrets were loaded from local `.env` without printing them; browser session
+JSON was checked for access/refresh-token leakage. The test helper reads its own encrypted session server-side using the
+local NextAuth secret solely to test independent backend authorization. It does not expose tokens to the browser.
 
-Browser automation was unavailable (browser access host unavailable and native Computer Use permissions not granted). The user explicitly selected HTTP-only testing. Therefore rendered controls, screenshots, accessibility and visual layout were **not** tested. This campaign verifies HTTP flows and application behavior; it does not claim crash/failover/repair-under-failure, quorum-loss, throughput, production TLS or availability validation.
+Browser automation was unavailable (browser access host unavailable and native Computer Use permissions not granted).
+The user explicitly selected HTTP-only testing. Therefore rendered controls, screenshots, accessibility and visual
+layout were **not** tested. This campaign verifies HTTP flows and application behavior; it does not claim
+crash/failover/repair-under-failure, quorum-loss, throughput, production TLS or availability validation.
 
-The consensus stack remains running at http://localhost:3000 with Keycloak at http://localhost:8180. Manage it using `docker compose -f compose.consensus.yaml ...`; `docker compose ps` without that file describes the legacy service definitions.
+The consensus stack remains running at http://localhost:3000 with Keycloak at http://localhost:8180. Manage it using
+`docker compose -f compose.consensus.yaml ...`; `docker compose ps` without that file describes the legacy service
+definitions.

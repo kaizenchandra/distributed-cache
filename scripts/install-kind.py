@@ -23,11 +23,15 @@ def main():
     machine = platform.machine().lower()
     target = platform.system().lower() + '-' + {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(machine, machine)
     if target not in DIGESTS: p.error('unsupported platform; install kind manually')
-    if a.binary: data = a.binary.read_bytes()
+    if a.binary:
+        data = a.binary.read_bytes()
     else:
-        with urllib.request.urlopen(f'https://github.com/kubernetes-sigs/kind/releases/download/v{VERSION}/kind-{target}', timeout=60) as response:
+        with urllib.request.urlopen(
+                f'https://github.com/kubernetes-sigs/kind/releases/download/v{VERSION}/kind-{target}',
+                timeout=60) as response:
             data = response.read()
-    if hashlib.sha256(data).hexdigest() != DIGESTS[target]: raise SystemExit('kind SHA-256 mismatch; installation aborted')
+    if hashlib.sha256(data).hexdigest() != DIGESTS[target]: raise SystemExit(
+        'kind SHA-256 mismatch; installation aborted')
     destination = Path(__file__).resolve().parents[1] / '.tools' / 'kind'
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(data)

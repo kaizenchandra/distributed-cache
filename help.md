@@ -214,7 +214,10 @@ cluster for a baseline workload without checking its health first.
 
 ## 6. Verified Kubernetes deployment
 
-Verified with Docker Engine 29.8.2, kind 0.33.0, kubectl 1.37.2, and Kubernetes 1.37.0 on macOS ARM64. The existing OrbStack Kubernetes API was offline; the test used a new disposable kind cluster and a separate kubeconfig. Your current context is not changed. Requires kubectl, Docker, Python 3, internet for official tool/node/etcd images, and sufficient VM resources (the tested Docker VM had 11 CPUs and about 9 GiB RAM).
+Verified with Docker Engine 29.8.2, kind 0.33.0, kubectl 1.37.2, and Kubernetes 1.37.0 on macOS ARM64. The existing
+OrbStack Kubernetes API was offline; the test used a new disposable kind cluster and a separate kubeconfig. Your current
+context is not changed. Requires kubectl, Docker, Python 3, internet for official tool/node/etcd images, and sufficient
+VM resources (the tested Docker VM had 11 CPUs and about 9 GiB RAM).
 
 ```sh
 python3 scripts/install-kind.py
@@ -227,19 +230,39 @@ python3 scripts/kubernetes-test.py --kubeconfig .tools/kubeconfig-cache-verify -
 python3 scripts/kubernetes-test.py --kubeconfig .tools/kubeconfig-cache-verify --mode consensus
 ```
 
-`docker image save --platform` requires Docker 28+; on AMD64 select `linux/amd64`. The pinned installer supports macOS/Linux ARM64/AMD64 and verifies official release digests before installing `.tools/kind`. `--binary /path/to/downloaded/kind` verifies an offline binary with the same check. It does not install kubectl. The tested cluster had a default `standard` local-path StorageClass; consensus requires a default class and three ReadWriteOnce PVCs. The cluster pulls the correct architecture of `quay.io/coreos/etcd:v3.6.5` itself. An earlier attempt to import the locally cached multi-platform etcd archive failed because unavailable platform digests were referenced; preloading etcd is unnecessary.
+`docker image save --platform` requires Docker 28+; on AMD64 select `linux/amd64`. The pinned installer supports
+macOS/Linux ARM64/AMD64 and verifies official release digests before installing `.tools/kind`.
+`--binary /path/to/downloaded/kind` verifies an offline binary with the same check. It does not install kubectl. The
+tested cluster had a default `standard` local-path StorageClass; consensus requires a default class and three
+ReadWriteOnce PVCs. The cluster pulls the correct architecture of `quay.io/coreos/etcd:v3.6.5` itself. An earlier
+attempt to import the locally cached multi-platform etcd archive failed because unavailable platform digests were
+referenced; preloading etcd is unnecessary.
 
-Each harness command creates only its reserved disposable namespace (`cache-verify-legacy` or `cache-verify-consensus`), generates test credentials without printing them, performs server-side manifest validation, waits for ready workloads, port-forwards a Service on a temporary localhost port, and runs real requests. It records `target/kubernetes-<mode>/result.json`, resources/events and bounded pod logs before deleting its namespace/PVCs by default. Only use a test cluster. Both commands exited 0 in the verified run.
+Each harness command creates only its reserved disposable namespace (`cache-verify-legacy` or `cache-verify-consensus`),
+generates test credentials without printing them, performs server-side manifest validation, waits for ready workloads,
+port-forwards a Service on a temporary localhost port, and runs real requests. It records
+`target/kubernetes-<mode>/result.json`, resources/events and bounded pod logs before deleting its namespace/PVCs by
+default. Only use a test cluster. Both commands exited 0 in the verified run.
 
-Legacy verifies Service routing, auth, CAS/batch, TTL, DELETE and metrics. Consensus additionally verifies three bound etcd PVCs, actual primary replacement/new incarnation/repair, scale 4→5→4, rolling gateway restart, and persistent etcd identity after pod replacement. These checks do not promise zero transient errors. The legacy manifest now has its missing gateway Service and probes. The consensus manifest is `deploy/kubernetes-consensus.yaml`; see [deployment semantics and remaining risks](docs/kubernetes.md).
+Legacy verifies Service routing, auth, CAS/batch, TTL, DELETE and metrics. Consensus additionally verifies three bound
+etcd PVCs, actual primary replacement/new incarnation/repair, scale 4→5→4, rolling gateway restart, and persistent etcd
+identity after pod replacement. These checks do not promise zero transient errors. The legacy manifest now has its
+missing gateway Service and probes. The consensus manifest is `deploy/kubernetes-consensus.yaml`;
+see [deployment semantics and remaining risks](docs/kubernetes.md).
 
-Existing test namespaces are refused unless you explicitly pass `--reuse`; it retains their existing Secret. `--keep` retains the namespace and PVCs on success or failure for investigation. Namespace deletion is destructive to test data. Do not use these reserved names for real workloads. When finished:
+Existing test namespaces are refused unless you explicitly pass `--reuse`; it retains their existing Secret. `--keep`
+retains the namespace and PVCs on success or failure for investigation. Namespace deletion is destructive to test data.
+Do not use these reserved names for real workloads. When finished:
 
 ```sh
 .tools/kind delete cluster --name cache-verify
 ```
 
-That removes the test cluster and its local volumes. `.tools/` is git-ignored and excluded from Docker build context because it contains the test kubeconfig. If the API is unreachable, inspect `kubectl --kubeconfig .tools/kubeconfig-cache-verify cluster-info`. For Pending pods inspect namespace events/PVCs and the default StorageClass; for ImagePullBackOff verify that the application image was loaded and etcd can be pulled. Do not switch to production credentials to resolve a local test problem.
+That removes the test cluster and its local volumes. `.tools/` is git-ignored and excluded from Docker build context
+because it contains the test kubeconfig. If the API is unreachable, inspect
+`kubectl --kubeconfig .tools/kubeconfig-cache-verify cluster-info`. For Pending pods inspect namespace events/PVCs and
+the default StorageClass; for ImagePullBackOff verify that the application image was loaded and etcd can be pulled. Do
+not switch to production credentials to resolve a local test problem.
 
 ## 7. Verified isolated JMH benchmarks
 
@@ -255,11 +278,23 @@ java -jar target/jmh/distributed-cache-0.1.0-benchmarks.jar 'dev.cache.StoreBenc
 java -jar target/jmh/distributed-cache-0.1.0-benchmarks.jar 'dev.cache.StoreBenchmark.hitAndCopy' -p policy=LRU,LFU -p valueBytes=128 -f 2 -wi 3 -i 5 -w 1s -r 1s -t 4 -prof gc -foe true -rf json -rff target/jmh/hit-copy-t4.json
 ```
 
-All listed benchmark cases completed locally; inspect JSON and console output for benchmark failures. The smoke run verified 11 parameterized cases. Each longer run produced two policy results with two forks and ten measured iteration samples per result. JMH uses localhost sockets to coordinate forked JVMs; a sandbox denying bind permission must allow these sockets. Do not disable forks merely to bypass that restriction.
+All listed benchmark cases completed locally; inspect JSON and console output for benchmark failures. The smoke run
+verified 11 parameterized cases. Each longer run produced two policy results with two forks and ten measured iteration
+samples per result. JMH uses localhost sockets to coordinate forked JVMs; a sandbox denying bind permission must allow
+these sockets. Do not disable forks merely to bypass that restriction.
 
-The profile writes exclusively under `target/jmh`, leaving the normal executable application jar at `target/distributed-cache-0.1.0.jar`. It overrides inherited Spring Boot shade transformers and disables Boot repackaging for the benchmark artifact. Normal `mvn verify` and Docker builds retain the application build. The normal and JMH builds each passed all 13 JUnit tests.
+The profile writes exclusively under `target/jmh`, leaving the normal executable application jar at
+`target/distributed-cache-0.1.0.jar`. It overrides inherited Spring Boot shade transformers and disables Boot
+repackaging for the benchmark artifact. Normal `mvn verify` and Docker builds retain the application build. The normal
+and JMH builds each passed all 13 JUnit tests.
 
-Benchmarks cover local hits, payload copying, misses, versioned overwrites, eviction and a 256-entry expiration sweep. Shared hit/overwrite state exposes contention; eviction/expiration fixtures are per thread. Invocation-level expiration setup influences GC profiler allocations and must not be interpreted as allocation caused only by the sweep. Overwrite includes version-generator overhead and may reject out-of-order versions under contention. FIFO and 4 KiB values are available parameters but were not measured in this update. See [raw JMH results and boundaries](docs/benchmark-results/2026-11-16/README.md). These in-process measurements exclude all distributed work and do not establish client throughput, latency percentiles or availability SLOs.
+Benchmarks cover local hits, payload copying, misses, versioned overwrites, eviction and a 256-entry expiration sweep.
+Shared hit/overwrite state exposes contention; eviction/expiration fixtures are per thread. Invocation-level expiration
+setup influences GC profiler allocations and must not be interpreted as allocation caused only by the sweep. Overwrite
+includes version-generator overhead and may reject out-of-order versions under contention. FIFO and 4 KiB values are
+available parameters but were not measured in this update.
+See [raw JMH results and boundaries](docs/benchmark-results/2026-11-16/README.md). These in-process measurements exclude
+all distributed work and do not establish client throughput, latency percentiles or availability SLOs.
 
 ## Verification recorded on 2026-11-16
 
@@ -284,8 +319,10 @@ are in [verification notes](docs/verification.md). Logs from the current consens
 
 GitHub Actions now includes independent plaintext and secure consensus jobs with native etcd installation. Local Docker
 Compose smoke and controlled chaos tests were subsequently executed; see the follow-up evidence below. CI/Linux
-execution, production Kubernetes deployment, exhaustive chaos testing, distributed load targets and production readiness remain
-unverified. Local kind deployment verification was added in the Kubernetes follow-up below. Local etcd mTLS testing does not prove secured cache-to-cache transport or a production certificate-rotation
+execution, production Kubernetes deployment, exhaustive chaos testing, distributed load targets and production readiness
+remain
+unverified. Local kind deployment verification was added in the Kubernetes follow-up below. Local etcd mTLS testing does
+not prove secured cache-to-cache transport or a production certificate-rotation
 procedure.
 
 ## Docker and performance follow-up
@@ -301,4 +338,9 @@ Actions here.
 
 ## Kubernetes and JMH follow-up
 
-Both local Kubernetes acceptance suites passed and deleted their test namespaces/PVCs. The disposable kind cluster was also removed; the original `orbstack` context and four development containers were preserved. The consensus suite verified primary repair, online storage scaling, gateway rolling restart and persistent etcd replacement. JMH smoke and one-/four-thread two-fork trials completed; [raw results](docs/benchmark-results/2026-11-16/README.md) are committed. Detailed evidence and remaining production limits are in [verification notes](docs/verification.md). Added Kubernetes/JMH CI jobs are configuration only; remote CI execution remains unverified.
+Both local Kubernetes acceptance suites passed and deleted their test namespaces/PVCs. The disposable kind cluster was
+also removed; the original `orbstack` context and four development containers were preserved. The consensus suite
+verified primary repair, online storage scaling, gateway rolling restart and persistent etcd replacement. JMH smoke and
+one-/four-thread two-fork trials completed; [raw results](docs/benchmark-results/2026-11-16/README.md) are committed.
+Detailed evidence and remaining production limits are in [verification notes](docs/verification.md). Added
+Kubernetes/JMH CI jobs are configuration only; remote CI execution remains unverified.

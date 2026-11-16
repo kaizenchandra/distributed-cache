@@ -9,7 +9,8 @@ see [collision-free metadata, improved repair and authenticated mTLS](docs/metad
 
 **Consensus mode is available:** [consensus topology, fencing, failover and repair](docs/consensus-v2.md). Run
 `python3 scripts/init-auth.py` then
-`docker compose -f compose.consensus.yaml up --build -d`. Browser/API authentication uses Keycloak by default; see [authentication](docs/authentication.md). It uses three etcd
+`docker compose -f compose.consensus.yaml up --build -d`. Browser/API authentication uses Keycloak by default;
+see [authentication](docs/authentication.md). It uses three etcd
 members, four storage nodes and two active gateways. The original commands and acceptance list below describe legacy
 mode; remaining-limitations statements about missing consensus/failover apply to that mode. Consensus mode still has the
 production security and performance limits documented in its guide.
@@ -82,7 +83,8 @@ journal, replica repair, default TTL, weighted/failure-domain placement, TLS/mTL
 admin rate limiting, full custom metrics/tracing/dashboard, Testcontainers suites, exhaustive chaos testing,
 distributed multi-host offered-rate generation. These remain required before the original definition of done can be met.
 Kubernetes
-manifests are locally verified examples, not a validated production deployment. No throughput or availability target has been
+manifests are locally verified examples, not a validated production deployment. No throughput or availability target has
+been
 demonstrated.
 
 ## Batch operations

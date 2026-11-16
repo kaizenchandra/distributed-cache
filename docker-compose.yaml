@@ -40,4 +40,4 @@ services:
       CACHE_NODES: http://node-a:8080,http://node-b:8080,http://node-c:8080
 
 volumes:
-  keycloak-data: {}
+  keycloak-data: { }

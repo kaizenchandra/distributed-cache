@@ -17,9 +17,11 @@ public class Security implements Filter {
     private final KeycloakAuth keycloak;
 
     public Security(@Value("${cache.client-token}") String c, @Value("${cache.internal-token}") String i, @Value("${cache.admin-token}") String a, org.springframework.beans.factory.ObjectProvider<KeycloakAuth> auth, @Value("${cache.auth-mode:token}") String mode) {
-        if (!java.util.Set.of("token", "keycloak").contains(mode)) throw new IllegalArgumentException("cache.auth-mode must be token or keycloak");
+        if (!java.util.Set.of("token", "keycloak").contains(mode))
+            throw new IllegalArgumentException("cache.auth-mode must be token or keycloak");
         keycloak = auth.getIfAvailable();
-        if (mode.equals("keycloak") && keycloak == null) throw new IllegalArgumentException("Keycloak validator required");
+        if (mode.equals("keycloak") && keycloak == null)
+            throw new IllegalArgumentException("Keycloak validator required");
         client = c;
         internal = i;
         admin = a;
@@ -38,7 +40,10 @@ public class Security implements Filter {
         String supplied = r.getHeader("Authorization");
         if (keycloak != null && !r.getRequestURI().startsWith("/internal/")) {
             int status = keycloak.authorize(supplied, r.getRequestURI());
-            if (status != 200) { s.sendError(status); return; }
+            if (status != 200) {
+                s.sendError(status);
+                return;
+            }
         } else if (supplied == null || !MessageDigest.isEqual(("Bearer " + expected).getBytes(StandardCharsets.UTF_8), supplied.getBytes(StandardCharsets.UTF_8))) {
             s.sendError(401);
             return;

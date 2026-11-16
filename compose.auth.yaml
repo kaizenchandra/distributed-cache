@@ -2,8 +2,8 @@
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.7.4
-    command: [start-dev, --import-realm]
-    ports: ['127.0.0.1:8180:8080']
+    command: [ start-dev, --import-realm ]
+    ports: [ '127.0.0.1:8180:8080' ]
     environment:
       KC_HOSTNAME: http://localhost:8180
       KC_HTTP_ENABLED: 'true'
@@ -18,7 +18,7 @@ services:
     mem_limit: 768m
   frontend:
     build: ./frontend
-    ports: ['127.0.0.1:3000:3000']
+    ports: [ '127.0.0.1:3000:3000' ]
     depends_on:
       keycloak:
         condition: service_started

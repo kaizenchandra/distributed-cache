@@ -24,7 +24,9 @@ not proof that the server received that rate. Inspect scheduled, dispatched, dro
 request errors, 2 means drops without errors, and 0 means neither occurred. Conflicting writes may return the documented
 409; blind replay is deliberately absent.
 
-Isolated JMH storage benchmarks are now implemented and executed; see [benchmark results and boundaries](benchmark-results/2026-11-16/README.md) and [commands](../help.md). They do not measure distributed throughput.
+Isolated JMH storage benchmarks are now implemented and executed;
+see [benchmark results and boundaries](benchmark-results/2026-11-16/README.md) and [commands](../help.md). They do not
+measure distributed throughput.
 
 Remaining performance work: synchronized distributed load generation across
 independent hosts; long warmup and steady-state trials; repetitions/confidence intervals; continuous CPU/GC/heap/network
