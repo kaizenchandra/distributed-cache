@@ -1,0 +1,4 @@
+# Isolated test ports; requires Docker Compose 2.24.4+ for !override.
+services:
+  coordinator:
+    ports: !override [ '127.0.0.1:18080:8080' ]

@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: cache
+    authorization:
+      credentials_file: /run/secrets/cache_admin_token
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [ 'coordinator:8080', 'node-a:8080', 'node-b:8080', 'node-c:8080' ]

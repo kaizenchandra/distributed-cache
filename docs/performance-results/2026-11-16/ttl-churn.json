@@ -1,0 +1,50 @@
+{
+  "mode": "closed-loop",
+  "urls": [
+    "http://localhost:18080"
+  ],
+  "workers": 2,
+  "distribution": "uniform",
+  "keys": 10,
+  "value_bytes": 128,
+  "ttl_ms": 25,
+  "read_ratio": 1.0,
+  "seed": 42,
+  "offered": 100,
+  "scheduled_arrivals": 100,
+  "dispatched": 100,
+  "target_ops_per_second": null,
+  "dropped_busy": 0,
+  "dropped_scheduler": 0,
+  "elapsed_seconds": 0.10975129100188497,
+  "successful_ops_per_second": 911.1510132330244,
+  "counters": {
+    "completed": 100,
+    "status_200": 100,
+    "GET_completed": 100,
+    "success": 100,
+    "misses": 100
+  },
+  "hit_ratio": 0.0,
+  "latency_bucket_upper_bounds": {
+    "GET": {
+      "count": 100,
+      "p50_ms": 1.961,
+      "p95_ms": 3.698,
+      "p99_ms": 4.72
+    },
+    "SET": {
+      "count": 0,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null
+    },
+    "errors": {
+      "count": 0,
+      "p50_ms": null,
+      "p95_ms": null,
+      "p99_ms": null
+    }
+  },
+  "note": "Offered means scheduled client demand; dropped arrivals never reach the server. Client HTTP operations, priming/warmup excluded. Drain included in elapsed. No cross-host/SLO claim."
+}

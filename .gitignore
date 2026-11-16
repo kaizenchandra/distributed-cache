@@ -1,0 +1,16 @@
+target/
+.env
+*.log
+
+__pycache__/
+*.p12
+*.key
+
+.tools/
+
+# Next.js console
+frontend/node_modules/
+frontend/.next/
+frontend/.env*
+!frontend/.env.example
+frontend/*.tsbuildinfo

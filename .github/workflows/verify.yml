@@ -1,0 +1,112 @@
+name: Verify cache
+on: [ push, pull_request ]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: mvn -B clean verify
+      - run: python3 scripts/integration.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-reports
+          path: |
+            target/surefire-reports/
+            target/process-*.log
+  consensus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        secure: [ '0', '1' ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: mvn -B clean verify
+      - run: python3 scripts/install-etcd.py
+      - name: Run real three-member consensus failures
+        env:
+          CACHE_SECURE_TEST: ${{ matrix.secure }}
+          ETCD_BIN: ${{ github.workspace }}/.tools/etcd-v3.6.5-linux-amd64/etcd
+        run: python3 scripts/consensus_failure.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: consensus-reports-secure-${{ matrix.secure }}
+          path: |
+            target/surefire-reports/
+            target/consensus-*.log
+  compose-chaos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 scripts/init-env.py
+      - run: python3 scripts/test_load.py
+      - run: python3 scripts/compose-test.py --mode legacy --chaos
+      - run: python3 scripts/compose-test.py --mode consensus --chaos
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compose-chaos-reports
+          path: target/compose-*/
+  jmh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: mvn -B -Pjmh verify
+      - run: java -jar target/jmh/distributed-cache-0.1.0-benchmarks.jar 'dev.cache.StoreBenchmark.*' -p policy=LRU -p valueBytes=128 -f 1 -wi 1 -i 1 -w 100ms -r 100ms -foe true -rf json -rff target/jmh/ci-smoke.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jmh-smoke
+          path: |
+            target/jmh/*.json
+            target/jmh/surefire-reports/
+  kubernetes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 scripts/install-kind.py
+      - run: .tools/kind create cluster --name cache-verify --kubeconfig "$PWD/.tools/kubeconfig-cache-verify" --image kindest/node:v1.37.0 --wait 180s
+      - run: docker build --provenance=false -t distributed-cache:0.1.0 .
+      - run: .tools/kind load docker-image distributed-cache:0.1.0 --name cache-verify
+      - run: python3 scripts/kubernetes-test.py --kubeconfig .tools/kubeconfig-cache-verify --mode legacy
+      - run: python3 scripts/kubernetes-test.py --kubeconfig .tools/kubeconfig-cache-verify --mode consensus
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kubernetes-reports
+          path: target/kubernetes-*/
+      - if: always()
+        run: .tools/kind delete cluster --name cache-verify

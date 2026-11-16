@@ -1,0 +1,184 @@
+# Local/trusted-network baseline. Provision etcd auth/mTLS and cache TLS before production.
+# Supply cache-tokens Secret in the selected namespace. Default StorageClass required.
+apiVersion: v1
+kind: Service
+metadata: { name: etcd }
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app: cache-etcd }
+  ports:
+    - { name: client, port: 2379 }
+    - { name: peer, port: 2380 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: etcd }
+spec:
+  serviceName: etcd
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector: { matchLabels: { app: cache-etcd } }
+  template:
+    metadata: { labels: { app: cache-etcd } }
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001 }
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector: { matchLabels: { app: cache-etcd } }
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: etcd
+          image: quay.io/coreos/etcd:v3.6.5
+          command: [ /usr/local/bin/etcd ]
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: [ ALL ] } }
+          env:
+            - { name: POD_NAME, valueFrom: { fieldRef: { fieldPath: metadata.name } } }
+            - { name: ETCD_NAME, value: '$(POD_NAME)' }
+            - { name: ETCD_DATA_DIR, value: /etcd-data }
+            - { name: ETCD_LISTEN_CLIENT_URLS, value: 'http://0.0.0.0:2379' }
+            - { name: ETCD_ADVERTISE_CLIENT_URLS, value: 'http://$(POD_NAME).etcd:2379' }
+            - { name: ETCD_LISTEN_PEER_URLS, value: 'http://0.0.0.0:2380' }
+            - { name: ETCD_INITIAL_ADVERTISE_PEER_URLS, value: 'http://$(POD_NAME).etcd:2380' }
+            - { name: ETCD_INITIAL_CLUSTER, value: 'etcd-0=http://etcd-0.etcd:2380,etcd-1=http://etcd-1.etcd:2380,etcd-2=http://etcd-2.etcd:2380' }
+            - { name: ETCD_INITIAL_CLUSTER_TOKEN, value: cache-kubernetes }
+            - { name: ETCD_AUTO_COMPACTION_RETENTION, value: 1h }
+          ports: [ { name: client, containerPort: 2379 }, { name: peer, containerPort: 2380 } ]
+          volumeMounts: [ { name: data, mountPath: /etcd-data } ]
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: '1', memory: 256Mi }
+          startupProbe:
+            exec: { command: [ /usr/local/bin/etcdctl, endpoint, health ] }
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            exec: { command: [ /usr/local/bin/etcdctl, endpoint, health ] }
+            timeoutSeconds: 3
+          # Liveness checks the local process, not consensus health, avoiding quorum-loss restart loops.
+          livenessProbe:
+            tcpSocket: { port: client }
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ ReadWriteOnce ]
+        resources: { requests: { storage: 1Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: cache }
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app: cache-storage }
+  ports: [ { name: http, port: 8080 } ]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: cache-config }
+data:
+  CACHE_MODE: consensus
+  CACHE_ETCD: http://etcd-0.etcd:2379,http://etcd-1.etcd:2379,http://etcd-2.etcd:2379
+  CACHE_NAMESPACE: kubernetes
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: cache }
+spec:
+  serviceName: cache
+  replicas: 4
+  podManagementPolicy: Parallel
+  selector: { matchLabels: { app: cache-storage } }
+  template:
+    metadata: { labels: { app: cache-storage } }
+    spec:
+      terminationGracePeriodSeconds: 30
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector: { matchLabels: { app: cache-storage } }
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: cache
+          image: distributed-cache:0.1.0
+          imagePullPolicy: IfNotPresent
+          securityContext: { runAsNonRoot: true, runAsUser: 10001, allowPrivilegeEscalation: false, capabilities: { drop: [ ALL ] } }
+          envFrom: [ { configMapRef: { name: cache-config } }, { secretRef: { name: cache-tokens } } ]
+          env:
+            - { name: POD_NAME, valueFrom: { fieldRef: { fieldPath: metadata.name } } }
+            - { name: CACHE_NODE_URL, value: 'http://$(POD_NAME).cache:8080' }
+          ports: [ { name: http, containerPort: 8080 } ]
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: '1', memory: 512Mi }
+          startupProbe: { httpGet: { path: /actuator/health, port: http }, periodSeconds: 5, failureThreshold: 60 }
+          readinessProbe: { httpGet: { path: /actuator/health, port: http } }
+          livenessProbe: { httpGet: { path: /actuator/health, port: http }, periodSeconds: 10 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: cache-gateway }
+spec:
+  selector: { app: cache-gateway }
+  ports: [ { name: http, port: 8080 } ]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: cache-gateway }
+spec:
+  replicas: 2
+  strategy: { type: RollingUpdate, rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } }
+  selector: { matchLabels: { app: cache-gateway } }
+  template:
+    metadata: { labels: { app: cache-gateway } }
+    spec:
+      terminationGracePeriodSeconds: 30
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector: { matchLabels: { app: cache-gateway } }
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: gateway
+          image: distributed-cache:0.1.0
+          imagePullPolicy: IfNotPresent
+          securityContext: { runAsNonRoot: true, runAsUser: 10001, allowPrivilegeEscalation: false, capabilities: { drop: [ ALL ] } }
+          envFrom: [ { configMapRef: { name: cache-config } }, { secretRef: { name: cache-tokens } } ]
+          env: [ { name: CACHE_COORDINATOR, value: 'true' } ]
+          ports: [ { name: http, containerPort: 8080 } ]
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: '1', memory: 512Mi }
+          startupProbe: { httpGet: { path: /actuator/health, port: http }, periodSeconds: 5, failureThreshold: 60 }
+          readinessProbe: { httpGet: { path: /actuator/health, port: http } }
+          livenessProbe: { httpGet: { path: /actuator/health, port: http }, periodSeconds: 10 }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: cache-etcd }
+spec:
+  minAvailable: 2
+  selector: { matchLabels: { app: cache-etcd } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: cache-storage }
+spec:
+  minAvailable: 3
+  selector: { matchLabels: { app: cache-storage } }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: cache-gateway }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app: cache-gateway } }

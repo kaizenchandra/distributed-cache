@@ -1,0 +1,43 @@
+x-common: &common
+  build: .
+  environment: &env
+    CACHE_AUTH_MODE: ${CACHE_AUTH_MODE:-keycloak}
+    CACHE_OIDC_ISSUER: http://localhost:8180/realms/cache
+    CACHE_OIDC_JWK_SET_URI: http://keycloak:8080/realms/cache/protocol/openid-connect/certs
+    CACHE_CLIENT_TOKEN: ${CACHE_CLIENT_TOKEN:?required}
+    CACHE_INTERNAL_TOKEN: ${CACHE_INTERNAL_TOKEN:?required}
+    CACHE_ADMIN_TOKEN: ${CACHE_ADMIN_TOKEN:?required}
+  mem_limit: 512m
+services:
+  keycloak:
+    extends:
+      file: compose.auth.yaml
+      service: keycloak
+  frontend:
+    extends:
+      file: compose.auth.yaml
+      service: frontend
+    environment:
+      CACHE_API_URL: http://coordinator:8080
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?run scripts/init-auth.py}
+      KEYCLOAK_ISSUER: http://localhost:8180/realms/cache
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080/realms/cache
+      KEYCLOAK_CLIENT_ID: cache-console
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?run scripts/init-auth.py}
+  node-a:
+    <<: *common
+  node-b:
+    <<: *common
+  node-c:
+    <<: *common
+  coordinator:
+    <<: *common
+    ports: [ "127.0.0.1:8080:8080" ]
+    environment:
+      <<: *env
+      CACHE_COORDINATOR: 'true'
+      CACHE_NODES: http://node-a:8080,http://node-b:8080,http://node-c:8080
+
+volumes:
+  keycloak-data: {}

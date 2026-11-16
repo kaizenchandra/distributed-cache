@@ -1,0 +1,80 @@
+# Supply cache-tokens Secret externally; never commit real credentials.
+apiVersion: v1
+kind: Service
+metadata: { name: cache }
+spec:
+  clusterIP: None
+  selector: { app: cache }
+  ports: [ { port: 8080 } ]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: cache }
+spec:
+  serviceName: cache
+  replicas: 3
+  selector: { matchLabels: { app: cache } }
+  template:
+    metadata: { labels: { app: cache } }
+    spec:
+      terminationGracePeriodSeconds: 30
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector: { matchLabels: { app: cache } }
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: cache
+          image: distributed-cache:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports: [ { containerPort: 8080 } ]
+          envFrom: [ { secretRef: { name: cache-tokens } } ]
+          resources:
+            requests: { cpu: '250m', memory: 256Mi }
+            limits: { cpu: '1', memory: 512Mi }
+          startupProbe: { httpGet: { path: /actuator/health, port: 8080 }, periodSeconds: 5, failureThreshold: 60 }
+          readinessProbe: { httpGet: { path: /actuator/health, port: 8080 } }
+          livenessProbe: { httpGet: { path: /actuator/health, port: 8080 }, initialDelaySeconds: 30 }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: cache }
+spec:
+  minAvailable: 3
+  selector: { matchLabels: { app: cache } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: cache-coordinator }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: cache-coordinator } }
+  template:
+    metadata: { labels: { app: cache-coordinator } }
+    spec:
+      containers:
+        - name: coordinator
+          image: distributed-cache:0.1.0
+          imagePullPolicy: IfNotPresent
+          envFrom: [ { secretRef: { name: cache-tokens } } ]
+          env:
+            - { name: CACHE_COORDINATOR, value: 'true' }
+            - { name: CACHE_NODES, value: 'http://cache-0.cache:8080,http://cache-1.cache:8080,http://cache-2.cache:8080' }
+          ports: [ { containerPort: 8080 } ]
+          resources:
+            requests: { cpu: '250m', memory: 256Mi }
+            limits: { cpu: '1', memory: 512Mi }
+
+          startupProbe: { httpGet: { path: /actuator/health, port: 8080 }, periodSeconds: 5, failureThreshold: 60 }
+          readinessProbe: { httpGet: { path: /actuator/health, port: 8080 } }
+          livenessProbe: { httpGet: { path: /actuator/health, port: 8080 }, periodSeconds: 10 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: cache-coordinator }
+spec:
+  selector: { app: cache-coordinator }
+  ports: [ { name: http, port: 8080 } ]

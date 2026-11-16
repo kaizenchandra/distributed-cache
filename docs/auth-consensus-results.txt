@@ -1,0 +1,62 @@
+PASS 01: anonymous frontend proxy request rejected
+PASS 02: Keycloak rejects incorrect password
+PASS 03: Keycloak user login and role claims; no token in session JSON
+PASS 04: user forbidden from frontend topology
+PASS 05: user forbidden from frontend repair
+PASS 06: user forbidden from frontend bootstrap
+PASS 07: user forbidden from frontend changeTopology
+PASS 08: frontend rejects cross-origin requests with a valid session
+PASS 09: Keycloak admin login and role claims
+PASS 10: backend independently denies user /admin/topology
+PASS 11: backend independently denies user /admin/repair
+PASS 12: backend independently denies user /admin/bootstrap
+PASS 13: backend rejects anonymous operation
+PASS 14: static client credential cannot bypass Keycloak
+PASS 15: static admin credential cannot bypass Keycloak
+PASS 16: human admin token cannot access internal RPC
+PASS 17: forged admin role fails JWT signature validation
+PASS 18: frontend rejects expired access token in an otherwise valid session
+PASS 19: authenticated frontend gateway health
+PASS 20: admin reads topology through frontend
+PASS 21: backend mode is consensus
+PASS 22: four storage members, three replicas, two minimum copies
+PASS 23: admin reconciles consensus membership through frontend
+PASS 24: admin reads consensus repair status through frontend
+PASS 25: legacy topology mutation unavailable in consensus mode
+PASS 26: second active gateway sees the same consensus membership
+PASS 27: GET missing key sentinel values
+PASS 28: EXISTS and TTL on missing key
+PASS 29: EXPIRE missing key is a miss
+PASS 30: SET permanent value
+PASS 31: GET returns exact value and version
+PASS 32: EXISTS present key
+PASS 33: TTL permanent sentinel
+PASS 34: frontend write visible through second gateway
+PASS 35: CAS succeeds for current version
+PASS 36: CAS stale version rejected
+PASS 37: failed CAS preserves current value
+PASS 38: EXPIRE applies deadline
+PASS 39: TTL shows decreasing deadline
+PASS 40: value expires and GET returns missing
+PASS 41: SET with TTL
+PASS 42: SET TTL expires naturally
+PASS 43: TTL zero deletes immediately
+PASS 44: CAS version zero creates absent key
+PASS 45: CAS version zero cannot overwrite present key
+PASS 46: EXPIRE minus one makes value permanent
+PASS 47: EXPIRE zero deletes immediately
+PASS 48: Unicode key and multiline UTF-8 value round trip
+PASS 49: empty value round trip
+PASS 50: 64 KiB maximum value round trip
+PASS 51: oversized value rejected
+PASS 52: invalid TTL rejected
+PASS 53: CAS requires expected version
+PASS 54: batch returns individual success and conflict statuses
+PASS 55: batch preserves order, continues after conflict, and deletes
+PASS 56: empty batch rejected
+PASS 57: malformed batch rejected before any mutation
+PASS 58: DELETE removes existing key
+PASS 59: DELETE missing key is idempotent
+PASS 60: admin can also execute cache operations
+PASS 61: logout clears frontend access
+PASS: 61 end-to-end HTTP checks in consensus mode. Generated cache keys deleted.
